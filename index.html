@@ -11102,14 +11102,16 @@ const GENRES = ['アニメ・キャラ系','特撮・戦隊・ライダー','カ
 // ---- ユーザーが編集できる選択肢ボタン（追加・並び替え・削除）。localStorageに保存＋JSONバックアップに同梱 ----
 // labels（商品ラベル）には一切触らない。あくまでフォームに出すボタンの並び。
 // note(備考)は既定の選択肢を持たない（空）＝中身はユーザーが自分で追加する
-const OPT_DEFAULTS = { store: [...DEFAULT_STORES], shelf: [...SHELVES], genre: [...GENRES], subcat: [], note: [] };
+const OPT_DEFAULTS = { store: [...DEFAULT_STORES], shelf: [...SHELVES], genre: [...GENRES], subcat: ['缶バッジ','アクスタ','ぬいぐるみ','マスコット','フィギュア','その他'], note: [] };
 const OPT_GROUPS = ['store','shelf','genre','subcat','note'];
 const OPT_KEY = 'stockLabelOptions';
 function loadOpts() {
   let raw = null;
   try { raw = JSON.parse(localStorage.getItem(OPT_KEY) || 'null'); } catch {}
   const pick = k => (raw && Array.isArray(raw[k])) ? [...raw[k]] : [...OPT_DEFAULTS[k]];
-  return { store: pick('store'), shelf: pick('shelf'), genre: pick('genre'), subcat: pick('subcat'), note: pick('note') };
+  // subcat は「保存済みが空 or 未設定」なら初期6つを入れる（新フィールドの後方互換）
+  const subcat = (raw && Array.isArray(raw.subcat) && raw.subcat.length) ? [...raw.subcat] : [...OPT_DEFAULTS.subcat];
+  return { store: pick('store'), shelf: pick('shelf'), genre: pick('genre'), subcat, note: pick('note') };
 }
 let OPTS = loadOpts();
 function saveOpts() { try { localStorage.setItem(OPT_KEY, JSON.stringify(OPTS)); } catch {} }
