@@ -77,6 +77,7 @@
   .tag.store { background:#f1e7e1; color:var(--accent-d); }
   .tag.shelf { background:#e9efe1; color:#516a37; }
   .tag.note { background:#f0ece2; color:#6b5d44; }
+  .tag.subcat { background:#e8f0f7; color:#3a6d8c; }
   .actions { display:flex; flex-direction:column; gap:4px; align-items:flex-start; }
   .actions .qb {
     width:150px; padding:7px 12px; border-radius:6px; border:1px solid var(--line);
@@ -248,6 +249,11 @@
       <span class="l">商品ジャンル <span style="color:var(--sub);font-weight:400;">（自動判定・直せます）</span> <button type="button" class="optedit-toggle" data-group="genre">✏ 編集</button></span>
       <div class="store-q" id="genreQ"></div>
       <input id="genreIn" placeholder="ジャンル（打ち込むと絞り込み）">
+    </label>
+    <label class="f">
+      <span class="l">サブカテゴリ <span style="color:var(--sub);font-weight:400;">（例：ぬいぐるみ／缶バッジ／アクスタ）</span> <button type="button" class="optedit-toggle" data-group="subcat">✏ 編集</button></span>
+      <div class="store-q" id="subcatQ"></div>
+      <input id="subcatIn" placeholder="サブカテゴリ（よく使うものは「✏ 編集」でボタン追加）">
     </label>
     <label class="f">
       <span class="l">備考 <button type="button" class="optedit-toggle" data-group="note">✏ 編集</button></span>
@@ -11096,14 +11102,14 @@ const GENRES = ['アニメ・キャラ系','特撮・戦隊・ライダー','カ
 // ---- ユーザーが編集できる選択肢ボタン（追加・並び替え・削除）。localStorageに保存＋JSONバックアップに同梱 ----
 // labels（商品ラベル）には一切触らない。あくまでフォームに出すボタンの並び。
 // note(備考)は既定の選択肢を持たない（空）＝中身はユーザーが自分で追加する
-const OPT_DEFAULTS = { store: [...DEFAULT_STORES], shelf: [...SHELVES], genre: [...GENRES], note: [] };
-const OPT_GROUPS = ['store','shelf','genre','note'];
+const OPT_DEFAULTS = { store: [...DEFAULT_STORES], shelf: [...SHELVES], genre: [...GENRES], subcat: [], note: [] };
+const OPT_GROUPS = ['store','shelf','genre','subcat','note'];
 const OPT_KEY = 'stockLabelOptions';
 function loadOpts() {
   let raw = null;
   try { raw = JSON.parse(localStorage.getItem(OPT_KEY) || 'null'); } catch {}
   const pick = k => (raw && Array.isArray(raw[k])) ? [...raw[k]] : [...OPT_DEFAULTS[k]];
-  return { store: pick('store'), shelf: pick('shelf'), genre: pick('genre'), note: pick('note') };
+  return { store: pick('store'), shelf: pick('shelf'), genre: pick('genre'), subcat: pick('subcat'), note: pick('note') };
 }
 let OPTS = loadOpts();
 function saveOpts() { try { localStorage.setItem(OPT_KEY, JSON.stringify(OPTS)); } catch {} }
@@ -11132,6 +11138,7 @@ const storeOf = p => LABELS.get(p.id)?.store || '';
 const shelfOf = p => LABELS.get(p.id)?.shelf || '';
 const genreOf = p => LABELS.get(p.id)?.genre || p.genre || 'その他';
 const noteOf = p => LABELS.get(p.id)?.note || '';
+const subcatOf = p => LABELS.get(p.id)?.subcat || '';
 
 // 1フィールドだけマージ保存。空なら削除。全フィールド空ならラベルごと削除
 async function setField(productId, field, value) {
@@ -11140,7 +11147,7 @@ async function setField(productId, field, value) {
   if (field === 'genre' && p && value === p.genre) value = ''; // 自動判定と同じなら上書き保存しない
   if (value) cur[field] = value; else delete cur[field];
   cur.updatedAt = Date.now();
-  if (cur.store || cur.shelf || cur.genre || cur.note) { await labelPut(cur); LABELS.set(productId, cur); }
+  if (cur.store || cur.shelf || cur.genre || cur.subcat || cur.note) { await labelPut(cur); LABELS.set(productId, cur); }
   else { await labelDel(productId); LABELS.delete(productId); }
   await serverSave();
 }
@@ -11346,7 +11353,7 @@ function render() {
     list.className = 'list';
     for (const p of slice) {
       const l = LABELS.get(p.id);
-      const gv = genreOf(p), st = storeOf(p), sh = shelfOf(p), no = noteOf(p);
+      const gv = genreOf(p), st = storeOf(p), sh = shelfOf(p), no = noteOf(p), sc = subcatOf(p);
       const row = document.createElement('div');
       row.className = 'row' + (l ? ' set' : '');
       const thumb = p.img
@@ -11357,6 +11364,7 @@ function render() {
       let tagsHtml = `<span class="tag genre">${esc(gv)}</span>`;
       if (st) tagsHtml += `<span class="tag store">🏬${esc(st)}</span>`;
       if (sh) tagsHtml += `<span class="tag shelf">📍${esc(sh)}</span>`;
+      if (sc) tagsHtml += `<span class="tag subcat">🏷${esc(sc)}</span>`;
       if (no) tagsHtml += `<span class="tag note">📝${esc(no)}</span>`;
 
       // アクション: アクティブ軸に応じてクイック操作を出し分け
@@ -11516,7 +11524,7 @@ async function openForm(productId) {
   $('targetName').innerHTML = `${esc(p.name)}<div class="target-source">出典: <a href="${esc(p.source.pageUrl)}" target="_blank" rel="noopener">${esc(stripTitleHtml(p.source.pageTitle))}</a></div>`;
 
   // 編集モードは毎回オフで開く（普段＝タップで選択。「✏ 編集」で並び替え/追加/削除）
-  pickerEdit.store = pickerEdit.shelf = pickerEdit.genre = pickerEdit.note = false;
+  pickerEdit.store = pickerEdit.shelf = pickerEdit.genre = pickerEdit.subcat = pickerEdit.note = false;
   document.querySelectorAll('.optedit-toggle').forEach(t => { t.textContent = '✏ 編集'; t.classList.remove('on'); });
 
   $('storeIn').value = l?.store || '';
@@ -11529,6 +11537,9 @@ async function openForm(productId) {
   $('genreIn').value = '';
   $('genreIn').oninput = () => renderPicker('genre');
   renderPicker('genre');
+
+  $('subcatIn').value = l?.subcat || '';
+  renderPicker('subcat');
 
   $('noteIn').value = l?.note || '';
   renderPicker('note');
@@ -11543,13 +11554,15 @@ async function saveLabel() {
   const store = $('storeIn').value.trim();
   const shelf = $('shelfIn').value.trim();
   const note = $('noteIn').value.trim();
+  const subcat = $('subcatIn').value.trim();
   const genreSel = genreSelVal || '';
   const cur = { productId: state.editId, updatedAt: Date.now() };
   if (store) cur.store = store;
   if (shelf) cur.shelf = shelf;
+  if (subcat) cur.subcat = subcat;
   if (note) cur.note = note;
   if (p && genreSel && genreSel !== p.genre) cur.genre = genreSel; // 自動判定と違う時だけ上書き保存
-  if (cur.store || cur.shelf || cur.genre || cur.note) {
+  if (cur.store || cur.shelf || cur.genre || cur.subcat || cur.note) {
     await labelPut(cur); LABELS.set(state.editId, cur);
   } else {
     await labelDel(state.editId); LABELS.delete(state.editId);
@@ -11599,6 +11612,7 @@ function buildExport() {
         genre: genreOf(p),
         store: l?.store || null,
         shelf: l?.shelf || null,
+        subcat: l?.subcat || null,
         note: l?.note || null,
         profit: p.profit ?? null,
         roi: p.roi ?? null,
@@ -11641,9 +11655,9 @@ $('imIn').onchange = async e => {
   try {
     const data = JSON.parse(await f.text());
     // 選択肢ボタンの並びも復元（あれば）
-    if (data && data.options && (Array.isArray(data.options.store) || Array.isArray(data.options.shelf) || Array.isArray(data.options.genre) || Array.isArray(data.options.note))) {
+    if (data && data.options && (Array.isArray(data.options.store) || Array.isArray(data.options.shelf) || Array.isArray(data.options.genre) || Array.isArray(data.options.subcat) || Array.isArray(data.options.note))) {
       const o = data.options, pick = k => Array.isArray(o[k]) ? [...o[k]] : (OPTS[k] || []);
-      OPTS = { store:pick('store'), shelf:pick('shelf'), genre:pick('genre'), note:pick('note') };
+      OPTS = { store:pick('store'), shelf:pick('shelf'), genre:pick('genre'), subcat:pick('subcat'), note:pick('note') };
       saveOpts();
     }
     const items = Array.isArray(data) ? data : data.items;
@@ -11656,9 +11670,10 @@ $('imIn').onchange = async e => {
       const cur = { ...(LABELS.get(match.id) || { productId: match.id }) };
       if (it.store) cur.store = it.store;
       if (it.shelf) cur.shelf = it.shelf;
+      if (it.subcat) cur.subcat = it.subcat;
       if (it.note) cur.note = it.note;
       if (it.genre && it.genre !== match.genre) cur.genre = it.genre;
-      if (!(cur.store || cur.shelf || cur.genre || cur.note)) continue;
+      if (!(cur.store || cur.shelf || cur.genre || cur.subcat || cur.note)) continue;
       cur.updatedAt = Date.now();
       await labelPut(cur);
       LABELS.set(match.id, cur);
